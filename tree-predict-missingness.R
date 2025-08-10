@@ -4,23 +4,65 @@
 
 # Parameter Preparation
 
-airquality <- tibble::as_tibble(datasets::airquality)
 data <- airquality
 
 vars_with_missingness <- names(data)[colSums(is.na(data)) > 0]
 vars_with_missingness
 
-var_target <- "Ozone"
+var_target <- "Ozone_cat"
 suffix <- "_missing"
 var_outcome <- paste0(var_target, suffix)
 
 # ------------------------------------------------------------------------------
 
-# Data Preparation
+# Creating categorical variables with kmeans for sensitivity analysis later
 
+tb_categorical_ozone <- tibble::tibble(
+  Ozone = na.omit(data$Ozone), 
+  Ozone_cat = kmeans(na.omit(data$Ozone), centers = 5, iter.max = 25)$cluster
+) |> 
+  dplyr::arrange(Ozone_cat, Ozone) |> 
+  dplyr::distinct()
+
+tb_categorical_solar <- tibble::tibble(
+  Solar.R = na.omit(data$Solar.R), 
+  solar_cat = kmeans(na.omit(data$Solar.R), centers = 5, iter.max = 25)$cluster
+) |> 
+  dplyr::arrange(solar_cat, Solar.R) |> 
+  dplyr::distinct()
+
+tb_categorical_wind <- tibble::tibble(
+  Wind = na.omit(data$Wind), 
+  wind_cat = kmeans(na.omit(data$Wind), centers = 5, iter.max = 25)$cluster
+) |> 
+  dplyr::arrange(wind_cat, Wind) |> 
+  dplyr::distinct()
+
+tb_categorical_temp <- tibble::tibble(
+  Temp = na.omit(data$Temp), 
+  temp_cat = kmeans(na.omit(data$Temp), centers = 5, iter.max = 25)$cluster
+) |> 
+  dplyr::arrange(temp_cat, Temp) |> 
+  dplyr::distinct()
+
+tbs_cat <- list(
+  "Ozone" = tb_categorical_ozone,
+  "Solar.R" = tb_categorical_solar,
+  "Wind" = tb_categorical_wind,
+  "Temp"= tb_categorical_temp
+)
+
+# ------------------------------------------------------------------------------
+
+# Data Preparation
 # Prepare data for missing data analysis
 # Create binary indicator for missingness of target variable
-data_analysis <- data |>
+
+# Join categorical features
+data_analysis <- list(data) |>
+  append(tbs_cat) |>
+  purrr::reduce(dplyr::left_join) |>
+  dplyr::select(-tidyselect::all_of(names(tbs_cat))) |>
   # Create the target missingness indicator
   # Create missingness indicators for other variables (potential predictors)
   dplyr::mutate(dplyr::across(tidyselect::where(~ any(is.na(.x))), ~ ifelse(is.na(.x), "missing", "not"), .names = "{.col}{suffix}"))
@@ -30,7 +72,7 @@ data_analysis <- data |>
 # Building the Classification Tree
 
 # Get all variables except the target and its missing indicator
-vars_predictors <- setdiff(colnames(data), c(var_target, var_outcome))
+vars_predictors <- setdiff(colnames(data_analysis), c(var_target, var_outcome))
 mod_formula <- as.formula(paste(var_outcome, "~", paste(vars_predictors, collapse = " + ")))
 
 # Build the tree
@@ -62,9 +104,7 @@ rules <- rpart.plot::rpart.rules(mod_fit, style = "wide")
 rules
 
 # Calculate overall accuracy
-mod_pred <- predict(mod_fit, type = "class")
-actual <- data_analysis[[var_outcome]]  # First column is the target
-accuracy <- mean(mod_pred == actual)
+accuracy <- mean(predict(mod_fit, type = "class") == data_analysis[[var_outcome]])
 accuracy
 
 mod_interpretation <- list(
@@ -223,5 +263,39 @@ cat(
   "Complexity based on number of important predictors:", assessment$complexity, "\n",
   "Pattern Complexity based on tree depth:", assessment$pattern_complexity, "\n"
 )
+
+# ------------------------------------------------------------------------------
+
+# Sensitivity analysis
+# Use tree insights to guide sensitivity analysis
+
+# Analyze missingness patterns by top predictor
+sensitivity_results <- purrr::map(
+  top_predictors, 
+  function(x) {
+    data_analysis |>
+      dplyr::group_by(.data[[x]]) |>
+      dplyr::summarize(
+        total_cases = dplyr::n(),
+        missing_cases = sum(.data[[var_outcome]] == "missing"),
+        missing_rate = round(missing_cases / total_cases * 100, 1),
+        .groups = "drop"
+      ) |>
+      dplyr::mutate(max_diff = max(missing_rate) - min(missing_rate)) |>
+      dplyr::mutate(large_diff = max_diff > 20)
+  }) |> setNames(top_predictors)
+
+# Sensitivity Analysis by Top Predictor
+sensitivity_results
+
+# Large
+cat("\nLarge differences in missing rates detected (", max_diff, "% difference)\n",
+    "Strong evidence for MAR mechanism\n",
+    "Recommendation: Include", best_predvar, "in imputation model\n")
+
+# Not Large
+cat("\nModerate differences in missing rates (", max_diff, "% difference)\n",
+    "Possible MAR mechanism\n",
+    "Recommendation: Consider including", best_predvar, "in imputation model\n")
 
 # ------------------------------------------------------------------------------
