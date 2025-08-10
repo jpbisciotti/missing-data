@@ -1,8 +1,7 @@
-
 # ------------------------------------------------------------------------------
 
 # Testing for MCAR with Little's MCAR Test. The primary statistical test for
-# MCAR is Little's test. It tests the null hypothesis that data are MCAR. It
+# MCAR is Little's test. This tests the null hypothesis that data are MCAR. It
 # uses chi-square statistics to compare observed and expected missing data
 # patterns. An important limitation is Little's test can only distinguish MCAR
 # from non-MCAR, but cannot distinguish between MAR and MNAR.
@@ -12,8 +11,8 @@
 
 # ------------------------------------------------------------------------------
 
-airquality <- datasets::airquality
-oceanbuoys <- naniar::oceanbuoys
+airquality <- tibble::as_tibble(datasets::airquality)
+oceanbuoys <- tibble::as_tibble(naniar::oceanbuoys)
 
 sum(is.na(airquality)) # 44
 sum(is.na(airquality)) / prod(dim(airquality)) # 0.048
@@ -31,8 +30,8 @@ naniar::mcar_test(oceanbuoys)
 
 # MCAR algo to replace with NA
 
-iris <- datasets::iris
-iris_new <- tibble::as_tibble(iris)
+iris <- tibble::as_tibble(datasets::iris)
+iris_new <- iris
 id_row <- NULL
 id_col <- NULL
 for (id_row in seq_len(nrow(iris_new))) {
@@ -44,8 +43,10 @@ for (id_row in seq_len(nrow(iris_new))) {
   }
 }
 
-sum(is.na(iris_new)) # 41
-sum(is.na(iris_new)) / prod(dim(iris_new)) # 0.055
+iris_new_1 <- iris_new
+
+sum(is.na(iris_new_1)) # 41
+sum(is.na(iris_new_1)) / prod(dim(iris_new_1)) # 0.055
 
 # p.value = 0.887 -> you fail to reject MCAR (data may be MCAR)
 naniar::mcar_test(iris_new) 
@@ -68,10 +69,12 @@ for (id_row in seq_len(nrow(iris_new))) {
   }
 }
 
-# p.value = 0.00475 -> reject MCAR (data are likely MAR or MNAR)
-naniar::mcar_test(iris_new) 
+iris_new_2 <- iris_new
 
-sum(is.na(iris_new)) # 41: same as above
-sum(is.na(iris_new)) / prod(dim(iris_new)) # 0.16: same as above
+# p.value = 0.00475 -> reject MCAR (data are likely MAR or MNAR)
+naniar::mcar_test(iris_new_2) 
+
+sum(is.na(iris_new_2)) # 41: same as above
+sum(is.na(iris_new_2)) / prod(dim(iris_new_2)) # 0.16: same as above
 
 # ------------------------------------------------------------------------------
