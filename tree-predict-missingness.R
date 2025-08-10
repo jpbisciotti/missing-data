@@ -17,40 +17,18 @@ var_outcome <- paste0(var_target, suffix)
 
 # Creating categorical variables with kmeans for sensitivity analysis later
 
-tb_categorical_ozone <- tibble::tibble(
-  Ozone = na.omit(data$Ozone), 
-  Ozone_cat = kmeans(na.omit(data$Ozone), centers = 5, iter.max = 25)$cluster
-) |> 
-  dplyr::arrange(Ozone_cat, Ozone) |> 
-  dplyr::distinct()
+vars_continuous <- c("Ozone", "Solar.R", "Wind", "Temp")
 
-tb_categorical_solar <- tibble::tibble(
-  Solar.R = na.omit(data$Solar.R), 
-  solar_cat = kmeans(na.omit(data$Solar.R), centers = 5, iter.max = 25)$cluster
-) |> 
-  dplyr::arrange(solar_cat, Solar.R) |> 
-  dplyr::distinct()
-
-tb_categorical_wind <- tibble::tibble(
-  Wind = na.omit(data$Wind), 
-  wind_cat = kmeans(na.omit(data$Wind), centers = 5, iter.max = 25)$cluster
-) |> 
-  dplyr::arrange(wind_cat, Wind) |> 
-  dplyr::distinct()
-
-tb_categorical_temp <- tibble::tibble(
-  Temp = na.omit(data$Temp), 
-  temp_cat = kmeans(na.omit(data$Temp), centers = 5, iter.max = 25)$cluster
-) |> 
-  dplyr::arrange(temp_cat, Temp) |> 
-  dplyr::distinct()
-
-tbs_cat <- list(
-  "Ozone" = tb_categorical_ozone,
-  "Solar.R" = tb_categorical_solar,
-  "Wind" = tb_categorical_wind,
-  "Temp"= tb_categorical_temp
-)
+tbs_cat <- vars_continuous |>
+  purrr::map(function(var) {
+    clean_data <- na.omit(data[[var]])
+    clusters <- kmeans(clean_data, centers = 5, iter.max = 25)$cluster
+    var_cat <- paste0(var, "_cat")
+    tibble::tibble(!!var := clean_data, !!var_cat := clusters) |>
+      dplyr::arrange(dplyr::across(tidyselect::all_of(c(var_cat, var)))) |>
+      dplyr::distinct()
+  }) |>
+  setNames(vars_continuous)
 
 # ------------------------------------------------------------------------------
 
